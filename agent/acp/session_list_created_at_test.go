@@ -6,7 +6,7 @@ import (
 )
 
 func TestConvertSessionList_DSHCreatedAtMilliseconds(t *testing.T) {
-	const createdAtMillis int64 = 1791379200123
+	createdAtMillis := int64(1791379200123)
 	got := convertSessionList([]acpSessionListEntry{
 		{SessionID: "dsh-session", Cwd: "/tmp/project", CreatedAt: &createdAtMillis},
 	}, "/tmp/project")
@@ -20,7 +20,7 @@ func TestConvertSessionList_DSHCreatedAtMilliseconds(t *testing.T) {
 }
 
 func TestConvertSessionList_UpdatedAtTakesPrecedence(t *testing.T) {
-	const createdAtMillis int64 = 1791379200123
+	createdAtMillis := int64(1791379200123)
 	got := convertSessionList([]acpSessionListEntry{
 		{
 			SessionID: "session",
