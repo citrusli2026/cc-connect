@@ -225,6 +225,29 @@ func (s *acpSession) handshake(resumeSessionID string, authMethod string) error 
 				return nil
 			}
 		}
+	} else if wantResume && len(initOut.AgentCapabilities.SessionCapabilities.Resume) > 0 {
+		resumeParams := map[string]any{
+			"sessionId":  resumeSessionID,
+			"cwd":        s.workDir,
+			"mcpServers": []any{},
+		}
+		resumeRes, err := s.tr.call(s.ctx, "session/resume", resumeParams)
+		if err != nil {
+			return fmt.Errorf("acp: session/resume %q: %w", resumeSessionID, err)
+		}
+		var rr struct {
+			SessionID string         `json:"sessionId"`
+			Modes     *acpModesBlock `json:"modes"`
+		}
+		if err := json.Unmarshal(resumeRes, &rr); err != nil {
+			return fmt.Errorf("acp: parse session/resume result: %w", err)
+		}
+		if rr.SessionID == "" {
+			rr.SessionID = resumeSessionID
+		}
+		s.setACPSessionID(rr.SessionID)
+		s.absorbModes(rr.Modes)
+		return nil
 	}
 
 	newParams := map[string]any{
