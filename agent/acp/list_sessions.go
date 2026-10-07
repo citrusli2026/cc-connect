@@ -48,6 +48,7 @@ type acpInitializeResult struct {
 			// treat "field present" as "supported" regardless of contents.
 			List   json.RawMessage `json:"list,omitempty"`
 			Resume json.RawMessage `json:"resume,omitempty"`
+			Close  json.RawMessage `json:"close,omitempty"`
 		} `json:"sessionCapabilities"`
 	} `json:"agentCapabilities"`
 }
@@ -62,6 +63,9 @@ type acpSessionListEntry struct {
 	Cwd       string `json:"cwd"`
 	Title     string `json:"title,omitempty"`
 	UpdatedAt string `json:"updatedAt,omitempty"`
+	// DSH persists Session header creation times from Date.now(), so this
+	// optional ACP field is Unix milliseconds rather than an RFC3339 string.
+	CreatedAt *int64 `json:"createdAt,omitempty"`
 }
 
 // probeSpawn launches `<cmd> <args...>`, sets up a JSON-RPC transport
@@ -254,6 +258,8 @@ func convertSessionList(entries []acpSessionListEntry, cwdFilter string) []core.
 			info.ModifiedAt = t
 		} else if t, err := time.Parse(time.RFC3339Nano, e.UpdatedAt); err == nil {
 			info.ModifiedAt = t
+		} else if e.CreatedAt != nil {
+			info.ModifiedAt = time.UnixMilli(*e.CreatedAt).UTC()
 		}
 		out = append(out, info)
 	}

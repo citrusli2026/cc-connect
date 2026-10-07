@@ -33,8 +33,11 @@ type acpSession struct {
 	cmd *exec.Cmd
 	tr  *transport
 
-	acpSessMu sync.RWMutex
-	acpSessID string
+	acpSessMu      sync.RWMutex
+	acpSessID      string
+	closeSupported atomic.Bool
+	closeOnce      sync.Once
+	closeErr       error
 
 	sendMu sync.Mutex
 
@@ -186,10 +189,12 @@ func (s *acpSession) handshake(resumeSessionID string, authMethod string) error 
 		return fmt.Errorf("acp: parse initialize result: %w", err)
 	}
 	listSupported := len(initOut.AgentCapabilities.SessionCapabilities.List) > 0
+	s.closeSupported.Store(len(initOut.AgentCapabilities.SessionCapabilities.Close) > 0)
 	slog.Debug("acp: initialized",
 		"protocol", initOut.ProtocolVersion,
 		"load_session", initOut.AgentCapabilities.LoadSession,
 		"list_sessions", listSupported,
+		"close_session", s.closeSupported.Load(),
 	)
 	if s.callbacks != nil {
 		s.callbacks.reportListSupported(listSupported)
@@ -401,6 +406,37 @@ func (s *acpSession) onNotification(method string, params json.RawMessage) {
 	for _, ev := range mapSessionUpdate(sid, params) {
 		s.emit(ev)
 	}
+	for _, ev := range mapDSHThoughtChunk(sid, params) {
+		s.emit(ev)
+	}
+}
+
+// mapDSHThoughtChunk maps DSH's ACP reasoning update, which is not included
+// in the older generic mapping table, to cc-connect's thinking event.
+func mapDSHThoughtChunk(sessionID string, params json.RawMessage) []core.Event {
+	var wrap struct {
+		SessionID string `json:"sessionId"`
+		Update    struct {
+			SessionUpdate string `json:"sessionUpdate"`
+			Content       struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"update"`
+	}
+	if err := json.Unmarshal(params, &wrap); err != nil || wrap.Update.SessionUpdate != "agent_thought_chunk" {
+		return nil
+	}
+	if wrap.Update.Content.Text == "" {
+		return nil
+	}
+	if wrap.SessionID != "" {
+		sessionID = wrap.SessionID
+	}
+	return []core.Event{{
+		Type:      core.EventThinking,
+		Content:   wrap.Update.Content.Text,
+		SessionID: sessionID,
+	}}
 }
 
 // maybeAbsorbCurrentModeUpdate watches session/update notifications
@@ -748,7 +784,24 @@ func (s *acpSession) Alive() bool {
 }
 
 func (s *acpSession) Close() error {
+	s.closeOnce.Do(func() {
+		s.closeErr = s.close()
+	})
+	return s.closeErr
+}
+
+func (s *acpSession) close() error {
 	s.alive.Store(false)
+	if s.closeSupported.Load() && s.tr != nil && s.currentACPSessionID() != "" {
+		closeCtx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
+		_, err := s.tr.call(closeCtx, "session/close", map[string]any{
+			"sessionId": s.currentACPSessionID(),
+		})
+		cancel()
+		if err != nil {
+			slog.Warn("acp: session/close failed; terminating ACP process", "session_id", s.currentACPSessionID(), "error", err)
+		}
+	}
 	s.cancel()
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
