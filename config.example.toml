@@ -2058,6 +2058,39 @@ app_secret = "your-feishu-app-secret"
 # token = "your-telegram-bot-token"
 
 # =============================================================================
+# Project: DeepSeek Harness ACP / 使用 DeepSeek Harness ACP
+# =============================================================================
+# DSH exposes its official ACP stdio server through `dsh --profile acp`.
+# cc-connect supplies a first-class `type = "dsh"` agent with these defaults;
+# override command, args, display_name, work_dir, or env when Desktop packages
+# its own absolute runtime paths.
+# DSH 通过 `dsh --profile acp` 提供官方 ACP stdio 服务。cc-connect 内置
+# `type = "dsh"` 一级 Agent，并提供以下默认值；桌面端打包自己的绝对路径时，
+# 可以覆盖 command、args、display_name、work_dir 或 env。
+
+# [[projects]]
+# name = "dsh-desktop"
+#
+# [projects.agent]
+# type = "dsh"
+#
+# [projects.agent.options]
+# work_dir = "/path/to/your/code"
+# # command = "/absolute/path/to/dsh"
+# # args = ["--profile", "acp"]
+# # display_name = "DeepSeek Harness"
+#
+# [projects.agent.options.env]
+# DSH_HOME = "/path/to/dsh-home"
+
+# [[projects.platforms]]
+# type = "feishu"
+#
+# [projects.platforms.options]
+# app_id = "cli_xxx"
+# app_secret = "your-feishu-app-secret"
+
+# =============================================================================
 # Project: ACP (Agent Client Protocol) agent / 使用 ACP 子进程
 # =============================================================================
 # Runs any binary that speaks ACP over stdio (newline-delimited JSON-RPC 2.0).
