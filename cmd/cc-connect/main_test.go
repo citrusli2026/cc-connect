@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,34 @@ import (
 	"github.com/chenhg5/cc-connect/config"
 	"github.com/chenhg5/cc-connect/core"
 )
+
+func TestLogReady_EmitsStructuredMessageOnce(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+
+	if !logReady(logger, 2, 0) {
+		t.Fatal("logReady() = false, want true for a successful startup")
+	}
+	line := output.String()
+	if got := strings.Count(line, `msg="cc-connect ready"`); got != 1 {
+		t.Fatalf("ready log count = %d, want one; output=%q", got, line)
+	}
+	if !strings.Contains(line, "projects=2") {
+		t.Fatalf("ready log missing project count: %q", line)
+	}
+}
+
+func TestLogReady_AllEnginesFailedEmitsNothing(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+
+	if logReady(logger, 2, 2) {
+		t.Fatal("logReady() = true, want false when all engines failed")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("ready log output = %q, want empty", output.String())
+	}
+}
 
 type stubMainAgent struct {
 	workDir string

@@ -36,6 +36,18 @@ var (
 // it through the engine's reload closure. nil when the API server is disabled.
 var globalAPIServer *core.APIServer
 
+// logReady emits the stable supervisor readiness marker after every engine
+// has completed its startup attempt. A process that is about to exit because
+// every engine failed must never advertise readiness; partial startup keeps
+// the existing daemon behavior and is still observable in the warning logs.
+func logReady(logger *slog.Logger, projects int, startErrors int) bool {
+	if logger == nil || projects <= 0 || startErrors >= projects {
+		return false
+	}
+	logger.Info("cc-connect ready", "projects", projects)
+	return true
+}
+
 // defaultResetOnIdleMins is applied when a project does not set
 // reset_on_idle_mins. After this many minutes of user inactivity, cc-connect
 // rotates to a fresh session for the next message instead of resuming the
@@ -1037,6 +1049,7 @@ func main() {
 		slog.Error("all engines failed to start, exiting")
 		os.Exit(1)
 	}
+	logReady(slog.Default(), len(engines), len(startErrors))
 
 	if cronSched != nil {
 		if err := cronSched.Start(); err != nil {
