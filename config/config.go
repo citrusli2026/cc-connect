@@ -1983,7 +1983,13 @@ func EnsureProjectWithFeishuPlatform(opts EnsureProjectWithFeishuOptions) (*Ensu
 
 	data, err := os.ReadFile(ConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
+		data = []byte{}
+		if err := os.MkdirAll(filepath.Dir(ConfigPath), 0o700); err != nil {
+			return nil, fmt.Errorf("create config directory: %w", err)
+		}
 	}
 	raw := string(data)
 	cfg := &Config{}
@@ -2042,6 +2048,8 @@ func EnsureProjectWithFeishuPlatform(opts EnsureProjectWithFeishuOptions) (*Ensu
 	if proj.Agent.Options == nil {
 		proj.Agent.Options = map[string]any{}
 	}
+	projectIndex := len(cfg.Projects)
+	platformIndex := len(proj.Platforms) - 1
 	workDir := strings.TrimSpace(opts.WorkDir)
 	if workDir != "" {
 		proj.Agent.Options["work_dir"] = workDir
@@ -2076,8 +2084,8 @@ func EnsureProjectWithFeishuPlatform(opts EnsureProjectWithFeishuOptions) (*Ensu
 	return &EnsureProjectWithFeishuResult{
 		Created:          true,
 		AddedPlatform:    false,
-		ProjectIndex:     len(cfg.Projects) - 1,
-		PlatformAbsIndex: len(cfg.Projects[len(cfg.Projects)-1].Platforms) - 1,
+		ProjectIndex:     projectIndex,
+		PlatformAbsIndex: platformIndex,
 		PlatformType:     platformType,
 	}, nil
 }

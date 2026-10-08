@@ -1688,6 +1688,30 @@ func TestEnsureProjectWithFeishuPlatform_CreatesMissingProject(t *testing.T) {
 	}
 }
 
+func TestEnsureProjectWithFeishuPlatform_CreatesMissingConfigFile(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "nested", "config.toml")
+	patchConfigPath(t, configPath)
+
+	result, err := EnsureProjectWithFeishuPlatform(EnsureProjectWithFeishuOptions{
+		ProjectName:  "fresh",
+		PlatformType: "feishu",
+	})
+	if err != nil {
+		t.Fatalf("EnsureProjectWithFeishuPlatform returned error: %v", err)
+	}
+	if !result.Created {
+		t.Fatal("result.Created = false, want true")
+	}
+	if result.ProjectIndex != 0 || result.PlatformAbsIndex != 0 {
+		t.Fatalf("result indexes = (%d, %d), want (0, 0)", result.ProjectIndex, result.PlatformAbsIndex)
+	}
+
+	cfg := readConfigFixture(t, configPath)
+	if len(cfg.Projects) != 1 || cfg.Projects[0].Name != "fresh" {
+		t.Fatalf("projects = %#v, want one project named fresh", cfg.Projects)
+	}
+}
+
 func TestEnsureProjectWithFeishuPlatform_AddsPlatformWhenProjectExistsWithoutFeishu(t *testing.T) {
 	configPath := writeConfigFixture(t, projectWithoutFeishuFixture)
 	patchConfigPath(t, configPath)
