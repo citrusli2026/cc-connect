@@ -55,7 +55,8 @@ type acpSession struct {
 	availableModes []acpModeInfo
 	currentMode    string
 
-	callbacks sessionCallbacks // may be nil (tests, integration harness)
+	callbacks  sessionCallbacks // may be nil (tests, integration harness)
+	turnResult func(error)
 }
 
 type permState struct {
@@ -76,6 +77,7 @@ type acpSessionConfig struct {
 	authMethod      string
 	initialMode     string           // if non-empty, applied via session/set_mode after session/new
 	callbacks       sessionCallbacks // may be nil
+	turnResult      func(error)
 }
 
 func newACPSession(ctx context.Context, cfg acpSessionConfig) (*acpSession, error) {
@@ -94,6 +96,7 @@ func newACPSession(ctx context.Context, cfg acpSessionConfig) (*acpSession, erro
 		toolInputByID: make(map[string]string),
 		acpSessID:     cfg.resumeSessionID,
 		callbacks:     cfg.callbacks,
+		turnResult:    cfg.turnResult,
 	}
 	s.alive.Store(true)
 
@@ -646,7 +649,12 @@ func (s *acpSession) emit(ev core.Event) {
 	}
 }
 
-func (s *acpSession) Send(prompt string, messageID string, images []core.ImageAttachment, files []core.FileAttachment) error {
+func (s *acpSession) Send(prompt string, messageID string, images []core.ImageAttachment, files []core.FileAttachment) (err error) {
+	defer func() {
+		if s.turnResult != nil {
+			s.turnResult(err)
+		}
+	}()
 	if !s.alive.Load() {
 		return fmt.Errorf("acp: session closed")
 	}

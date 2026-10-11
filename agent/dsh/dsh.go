@@ -33,6 +33,7 @@ func New(opts map[string]any) (core.Agent, error) {
 	if !ok {
 		return a, nil
 	}
+	base.SetTurnResultHandler(reportDSHResult)
 	return &Agent{Agent: base}, nil
 }
 
