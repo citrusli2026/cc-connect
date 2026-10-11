@@ -409,37 +409,6 @@ func (s *acpSession) onNotification(method string, params json.RawMessage) {
 	for _, ev := range mapSessionUpdate(sid, params) {
 		s.emit(ev)
 	}
-	for _, ev := range mapDSHThoughtChunk(sid, params) {
-		s.emit(ev)
-	}
-}
-
-// mapDSHThoughtChunk maps DSH's ACP reasoning update, which is not included
-// in the older generic mapping table, to cc-connect's thinking event.
-func mapDSHThoughtChunk(sessionID string, params json.RawMessage) []core.Event {
-	var wrap struct {
-		SessionID string `json:"sessionId"`
-		Update    struct {
-			SessionUpdate string `json:"sessionUpdate"`
-			Content       struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"update"`
-	}
-	if err := json.Unmarshal(params, &wrap); err != nil || wrap.Update.SessionUpdate != "agent_thought_chunk" {
-		return nil
-	}
-	if wrap.Update.Content.Text == "" {
-		return nil
-	}
-	if wrap.SessionID != "" {
-		sessionID = wrap.SessionID
-	}
-	return []core.Event{{
-		Type:      core.EventThinking,
-		Content:   wrap.Update.Content.Text,
-		SessionID: sessionID,
-	}}
 }
 
 // maybeAbsorbCurrentModeUpdate watches session/update notifications
