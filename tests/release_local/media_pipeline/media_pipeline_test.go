@@ -40,6 +40,31 @@ func (a *recordingAgent) Stop() error {
 	return a.session.Close()
 }
 
+// A multi-session scenario must not share one event channel between two turns.
+type multiRecordingAgent struct {
+	*recordingAgent
+	mu       sync.Mutex
+	sessions []*recordingSession
+}
+
+func (a *multiRecordingAgent) StartSession(_ context.Context, id string) (core.AgentSession, error) {
+	session := newRecordingSession()
+	session.setID(id)
+	a.mu.Lock()
+	a.sessions = append(a.sessions, session)
+	a.mu.Unlock()
+	return session, nil
+}
+
+func (a *multiRecordingAgent) Stop() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, session := range a.sessions {
+		_ = session.Close()
+	}
+	return nil
+}
+
 type recordingSession struct {
 	mu         sync.Mutex
 	id         string
@@ -419,7 +444,10 @@ func TestSendToSessionWithAttachmentsRespectsDisabledAttachmentSend(t *testing.T
 }
 
 func TestSendToSessionWithAttachmentsRequiresSessionWhenMultipleSessionsHaveAttachments(t *testing.T) {
-	engine, agent, platform := newMediaEngine(t)
+	agent := &multiRecordingAgent{recordingAgent: newRecordingAgent()}
+	platform := &mediaPlatform{}
+	engine := core.NewEngine("release-media", agent, []core.Platform{platform}, t.TempDir()+"/sessions.json", core.LangEnglish)
+	t.Cleanup(func() { _ = engine.Stop() })
 	first := mediaMessage("first")
 	first.SessionKey = "media:chat-1:user-1"
 	second := mediaMessage("second")
@@ -428,8 +456,34 @@ func TestSendToSessionWithAttachmentsRequiresSessionWhenMultipleSessionsHaveAtta
 
 	engine.ReceiveMessage(platform, first)
 	engine.ReceiveMessage(platform, second)
-	agent.session.waitRecords(t, 2)
 	platform.waitTextContaining(t, "media ok")
+	// Both turns must finish persistence before the test's TempDir is removed.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		texts, _, _, _, _ := platform.snapshot()
+		completed := 0
+		for _, text := range texts {
+			if strings.Contains(text, "media ok") {
+				completed++
+			}
+		}
+		if completed == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timeout waiting for both completed turns, got %#v", texts)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	agent.mu.Lock()
+	sessions := append([]*recordingSession(nil), agent.sessions...)
+	agent.mu.Unlock()
+	if len(sessions) != 2 {
+		t.Fatalf("want two distinct agent sessions, got %d", len(sessions))
+	}
+	for _, session := range sessions {
+		session.waitRecords(t, 1)
+	}
 
 	err := engine.SendToSessionWithAttachments(
 		"",

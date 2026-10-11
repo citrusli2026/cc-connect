@@ -299,4 +299,6 @@ func TestUnknownSlashCommandNotifiesThenFallsThroughToAgent(t *testing.T) {
 	if !strings.Contains(records[0].prompt, "/not-a-command keep this request") {
 		t.Fatalf("unknown slash command should fall through to agent, got prompt %q", records[0].prompt)
 	}
+	// The final reply follows session persistence; drain the turn before TempDir cleanup.
+	platform.waitTextContaining(t, "matrix response")
 }
