@@ -1285,12 +1285,19 @@ func TestCUJ_A5_FileReachesAgent(t *testing.T) {
 		agent.mu.Lock()
 		n := len(agent.sessions)
 		agent.mu.Unlock()
-		if n > 0 {
-			return
+		if n > 0 && !e.sessions.GetOrCreateActive(msg.SessionKey).Busy() {
+			for _, reply := range plat.getSent() {
+				if strings.TrimSpace(reply) == "ok" {
+					// Session creation precedes Send and persistence. Wait for
+					// the visible final reply AND the turn to release its lock
+					// before TempDir cleanup can remove the attachment store.
+					return
+				}
+			}
 		}
 		select {
 		case <-deadline:
-			t.Fatal("agent never received the message with file attachment")
+			t.Fatal("agent never completed the message with file attachment")
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
